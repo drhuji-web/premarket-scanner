@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 PreMarket High-Beta Scanner — v4
 يستخدم: Alpha Vantage + Twelve Data + Claude AI
@@ -85,11 +86,11 @@ def fetch_top_movers_av() -> list[str]:
 #  2. جلب بيانات السهم من Twelve Data
 # ══════════════════════════════════════════════════════════
 def fetch_stock_data_twelve(symbol: str) -> dict:
-    """يجلب بيانX�ت السهم الأساسية من Twelve Data"""
+    """يجلب بيانX�ت السهم الأساسية من Twelve Data"""
     if not TWELVE_DATA_KEY:
         return {}
     try:
-        # بيانX�ت السعر + الإحصاءات
+        # بيانX�ت السعر + الإحصاءات
         url = (
             f"https://api.twelvedata.com/quote"
             f"?symbol={symbol}&apikey={TWELVE_DATA_KEY}"
@@ -359,7 +360,7 @@ def fetch_chart_structure(symbol: str) -> dict:
       - مستوى المقاومة الرئيسية
       - موقع السعر من المتوسطات (SMA20, SMA50)
       - نمط الشمعة الأخيرة (doji / hammer / engulfing / normal)
-    يُعق+ݘ/f��عق+ݘ/Y�ُسل لاتييأت التؗشيئ ويُرسل لـ Claude.
+    يُعق+ݘ/f��عق+ݘ/Y�ُسل لاتييأت التؗشيئ ويُرسل لـ Claude.
     """
     if not TWEFVE_DATA_KEY:
         return {}
@@ -387,7 +388,7 @@ def fetch_chart_structure(symbol: str) -> dict:
         sma50 = sum(closes[:50]) / 50 if len(closes) >= 50 else None
 
         # ── الاتجاه العام ───────────────────────────────
-        # نقارن متوسط أول 10 شمعات مع متوسط آخر �0 شمعات
+        # نقارن متوسط أول 10 شمعات مع متوسط آخر �0 شمعات
         recent_avg = sum(closes[:10])  / 10
         older_avg  = sum(closes[10:20]) / 10
         if recent_avg > older_avg * 1.02:

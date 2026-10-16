@@ -360,7 +360,7 @@ def fetch_chart_structure(symbol: str) -> dict:
       - مستوى المقاومة الرئيسية
       - موقع السعر من المتوسطات (SMA20, SMA50)
       - نمط الشمعة الأخيرة (doji / hammer / engulfing / normal)
-    يُعق+ݘ/f��عق+ݘ/Y�ُسل لاتييأت التؗشيئ ويُرسل لـ Claude.
+    يُعيد قاموساً يُضاف لبيانات الترشيح ويُرسل لـ Claude.
     """
     if not TWEFVE_DATA_KEY:
         return {}
@@ -381,7 +381,7 @@ def fetch_chart_structure(symbol: str) -> dict:
         lows   = [float(c["low"])   for c in candles]
 
         # الأحدث هو index 0
-     price = closes[0]
+        price = closes[0]
 
         # ── المتوسطات المتحركة ──────────────────────────
         sma20 = sum(closes[:20]) / 20

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 PreMarket Scanner — واجهة ويب Flask
 تُشغَّل محمياً أو على Render/Railway

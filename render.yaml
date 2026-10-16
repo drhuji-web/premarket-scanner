@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: premarket-scanner
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ALPHA_VANTAGE_KEY
+        sync: false
+      - key: TWELVE_DATA_KEY
+        sync: false
+      - key: TOP_N_STOCKS
+        value: "7"
+      - key: MIN_BETA
+        value: "1.5"

@@ -62,7 +62,7 @@ WATCHLIST = [
 def fetch_top_movers_av() -> list[str]:
     """يجلب أعلى المتحركين اليوم من Alpha Vantage"""
     if not ALPHA_VANTAGE_KEY:
-        log.warning("ALPHA_VANTAGE_KEY غير موجود — تضطي top movers")
+        log.warning("ALPHA_VANTAGE_KEY غير موجود — تخطي top movers")
         return []
     try:
         url = (
@@ -86,11 +86,11 @@ def fetch_top_movers_av() -> list[str]:
 #  2. جلب بيانات السهم من Twelve Data
 # ══════════════════════════════════════════════════════════
 def fetch_stock_data_twelve(symbol: str) -> dict:
-    """يجلب بيانX�ت السهم الأساسية من Twelve Data"""
+    """يجلب بيانات السهم الأساسية من Twelve Data"""
     if not TWELVE_DATA_KEY:
         return {}
     try:
-        # بيانX�ت السعر + الإحصاءات
+        # بيانات السعر + الإحصاءات
         url = (
             f"https://api.twelvedata.com/quote"
             f"?symbol={symbol}&apikey={TWELVE_DATA_KEY}"
@@ -332,7 +332,7 @@ def fetch_gap_data(symbol: str) -> dict:
 
 def gap_score(gap_data: dict) -> float:
     """
-    يٍعب نقطة إضافية للسهم بناءً على الفجوات:
+    يحسب نقطة إضافية للسهم بناءً على الفجوات:
       +2.0  فجوة افتتاح اليوم > 2%
       +1.0  فجوة افتتاح 0.5–2%
       +0.5  لكل فجوة تاريخية غير مغلقة في نطاق ±8% من السعر
@@ -362,7 +362,7 @@ def fetch_chart_structure(symbol: str) -> dict:
       - نمط الشمعة الأخيرة (doji / hammer / engulfing / normal)
     يُعيد قاموساً يُضاف لبيانات الترشيح ويُرسل لـ Claude.
     """
-    if not TWEFVE_DATA_KEY:
+    if not TWELVE_DATA_KEY:
         return {}
     try:
         url = (
@@ -388,7 +388,7 @@ def fetch_chart_structure(symbol: str) -> dict:
         sma50 = sum(closes[:50]) / 50 if len(closes) >= 50 else None
 
         # ── الاتجاه العام ───────────────────────────────
-        # نقارن متوسط أول 10 شمعات مع متوسط آخر �0 شمعات
+        # نقارن متوسط أول 10 شمعات مع متوسط آخر 10 شمعات
         recent_avg = sum(closes[:10])  / 10
         older_avg  = sum(closes[10:20]) / 10
         if recent_avg > older_avg * 1.02:
@@ -452,7 +452,7 @@ def fetch_chart_structure(symbol: str) -> dict:
 #  6-C. الفريمات الكبيرة + كشف النماذج (Multi-Timeframe & Patterns)
 # ══════════════════════════════════════════════════════════
 def _pivot_highs(prices: list[float], n: int = 2) -> list[tuple[int, float]]:
-    """يُعيد قمماً محلية: كل نقطة أعمى من n نقاط على يمينها ويسارها."""
+    """يُعيد قمماً محلية: كل نقطة أعلى من n نقاط على يمينها ويسارها."""
     pivots = []
     for i in range(n, len(prices) - n):
         if all(prices[i] >= prices[i - j] for j in range(1, n + 1)) and \
@@ -462,7 +462,7 @@ def _pivot_highs(prices: list[float], n: int = 2) -> list[tuple[int, float]]:
 
 
 def _pivot_lows(prices: list[float], n: int = 2) -> list[tuple[int, float]]:
-    """يُعيد قيعاناً محمية."""
+    """يُعيد قيعاناً محلية."""
     pivots = []
     for i in range(n, len(prices) - n):
         if all(prices[i] <= prices[i - j] for j in range(1, n + 1)) and \
@@ -480,10 +480,10 @@ def _detect_patterns(
     """
     يكتشف النماذج الفنية من قائمة شمعات (الأحدث أولاً index=0).
     يعكس القائمة داخلياً لتكون الأقدم أولاً (index=0 = أقدم شمعة)
-    وهذا هو الاتجاه الطبيضي للتحليل الرياضي للنماذج.
+    وهذا هو الاتجاه الطبيعي للتحليل الرياضي للنماذج.
     يُعيد قائمة نماذج مكتشفة مع مرحلتها.
     """
-    # عكس القوائم: الأقدم أوماً
+    # عكس القوائم: الأقدم أولاً
     c = list(reversed(closes))
     h = list(reversed(highs))
     lo = list(reversed(lows))
@@ -493,7 +493,7 @@ def _detect_patterns(
 
     patterns = []
     ph = _pivot_highs(h, n=2)   # قمم محلية (index, value)
-    pl = _pivot_lows(lo, n=2)   # قيعان محمية
+    pl = _pivot_lows(lo, n=2)   # قيعان محلية
 
     current_price = c[-1]       # السعر الأحدث
 
@@ -537,7 +537,7 @@ def _detect_patterns(
             })
 
     # ──────────────────────────────────────────────────────
-    # 3. Head & Shoulders (3 قمم: الوسطى أعمى)
+    # 3. Head & Shoulders (3 قمم: الوسطى أعلى)
     # ──────────────────────────────────────────────────────
     if len(ph) >= 3:
         ls_i, ls_v = ph[-3]   # الكتف الأيسر
@@ -637,7 +637,7 @@ def _detect_patterns(
                 "name":      "Bull Flag",
                 "name_ar":   "راية صعودية",
                 "timeframe": timeframe,
-                "stage":     "يتشكّل — انتظر كسر أعمى الراية ⚠️",
+                "stage":     "يتشكّل — انتظر كسر أعلى الراية ⚠️",
                 "bias":      "bullish",
                 "key_level": round(max(h[-5:]), 2),
                 "note_ar":   f"عمود +{round(pole_gain,1)}% | الراية ضيقة {round(flag_rel,1)}%",
@@ -718,10 +718,10 @@ def _detect_patterns(
 
 def fetch_multi_timeframe(symbol: str) -> dict:
     """
-    يجلب بيانا֪ الأسبوعي والشهري ويحمل:
+    يجلب بيانات الأسبوعي والشهري ويحلل:
       - الاتجاه على كل فريم
       - النماذج الفنية المتشكّلة أو في طور التشكّل
-    يُعيد قاموساً يُضاف لبيانا֪ المرشح.
+    يُعيد قاموساً يُضاف لبيانات المرشح.
     """
     if not TWELVE_DATA_KEY:
         return {}
@@ -751,7 +751,7 @@ def fetch_multi_timeframe(symbol: str) -> dict:
             highs  = [float(c["high"])  for c in candles]
             lows   = [float(c["low"])   for c in candles]
 
-            # اتجاه الفريم: مقارنة أول 5 شمعا֪ بآخر 5
+            # اتجاه الفريم: مقارنة أول 5 شمعات بآخر 5
             recent = sum(closes[:5]) / 5
             older  = sum(closes[-5:]) / 5
             if recent > older * 1.03:
@@ -824,7 +824,7 @@ def build_candidates() -> list[dict]:
     for sym in symbols:
         log.info(f"  جارٍ تحليل {sym}...")
 
-        # بيانا֪ السعر
+        # بيانات السعر
         price_data   = fetch_stock_data_twelve(sym)
         company_data = fetch_company_overview_av(sym)
 
@@ -846,7 +846,7 @@ def build_candidates() -> list[dict]:
         earnings_date = earnings_cal.get(sym, "")
         has_earnings  = bool(earnings_date and earnings_date >= today_str)
 
-        # البنية العامة للشارت + الفجوا֪ السعرية
+        # البنية العامة للشارت + الفجوات السعرية
         gap_data   = fetch_gap_data(sym)
         chart_data = fetch_chart_structure(sym)
         time.sleep(0.3)   # فارق صغير بين الطلبين (نفس الـ API)
@@ -874,7 +874,7 @@ def build_candidates() -> list[dict]:
         candidates.append(stock)
         time.sleep(1.0)   # احترام حدود الطلبات
 
-    # ترتيب مركّب: (بيتا × حجم نسبي) + نقطة الفجوا֪
+    # ترتيب مركّب: (بيتا × حجم نسبي) + نقطة الفجوات
     candidates.sort(
         key=lambda x: (
             x.get("beta", 0) * (x.get("volume", 1) / max(x.get("avg_volume", 1), 1))
@@ -888,11 +888,11 @@ def build_candidates() -> list[dict]:
 
 
 # ══════════════════════════════════════════════════════════
-#  7. تحليل بالذكاء الاصطهاعي — Claude
+#  7. تحليل بالذكاء الاصطناعي — Claude
 # ══════════════════════════════════════════════════════════
 def analyze_with_claude(candidates: list[dict]) -> list[dict]:
     """يحلل المرشحين بـ Claude ويختار أفضل TOP_N_STOCKS"""
-    log.info("جارٍ التحميل بالذكاء الاصطهاعي...")
+    log.info("جارٍ التحليل بالذكاء الاصطناعي...")
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     today  = datetime.now(ET).strftime("%A, %B %d, %Y")
@@ -932,7 +932,7 @@ Chart structure rules (daily):
 - dist_support_pct < 2% → stock is near support (safer long entry)
 
 Multi-timeframe rules:
-- tf_alignment "bullish_aligned" (weekly + monthly both uptrend) → strongest long biaz; increase signal_strength +5
+- tf_alignment "bullish_aligned" (weekly + monthly both uptrend) → strongest long bias; increase signal_strength +5
 - tf_alignment "bearish_aligned" → avoid longs; reduce signal_strength -5
 - tf_alignment "weekly_vs_monthly_conflict" → caution; tighter stops recommended
 - weekly_trend "uptrend" + daily catalyst → high-conviction setup
@@ -970,7 +970,7 @@ Respond ONLY with a valid JSON array — no markdown, no explanation outside the
     "stop_loss": 139.80,
     "risk_reward": "2.4:1",
     "upside_pct": "+4.4%",
-    "analysis_ar": "جملتان أو ثلاث بالعربية تشرح المحفز + البنية الفنية للشارت اليومي والأسبوعي + تأثير الفجوا֪ والنماذج على السيناريو المتوقع."
+    "analysis_ar": "جملتان أو ثلاث بالعربية تشرح المحفز + البنية الفنية للشارت اليومي والأسبوعي + تأثير الفجوات والنماذج على السيناريو المتوقع."
   }}
 ]
 
@@ -981,8 +981,537 @@ Rules:
 - stop_loss: below nearest support or gap fill level, whichever is tighter
 - gap_summary: brief Arabic description of today's gap AND nearest unfilled historical gap (or "لا فجوات" if none)
 - chart_notes: brief Arabic: SMA position + distance to support/resistance + last candle pattern
-- patterns_summary_ar: keep or crefine the detected multi-timeframe patterns from input data; if none detected write "لا نماذج واضحى"
+- patterns_summary_ar: keep or refine the detected multi-timeframe patterns from input data; if none detected write "لا نماذج واضحة"
 - trend: "bullish" | "bearish" | "neutral" — reflect DAILY timeframe
 - catalyst_types: only ["earnings","news","technical","analyst","short_squeeze","gap"]
 - All price values must be numbers (not strings)
-- analysis_ar: 2-3 sentences in Arabic integrating catalyst + daily/weekly chart structure + gap context + any forming pa
+- analysis_ar: 2-3 sentences in Arabic integrating catalyst + daily/weekly chart structure + gap context + any forming patterns
+"""
+
+    resp = client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=4000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    result = json.loads(raw)
+    log.info(f"Claude اختار {len(result)} أسهم")
+    return result
+
+
+# ══════════════════════════════════════════════════════════
+#  8. تنسيق رسالة Telegram
+# ══════════════════════════════════════════════════════════
+CATALYST_EMOJI = {
+    "earnings":      "💰",
+    "news":          "📰",
+    "technical":     "📊",
+    "analyst":       "⭐",
+    "short_squeeze": "🚀",
+    "gap":           "↕️",
+}
+TREND_EMOJI = {"bullish": "🟢", "bearish": "🔴", "neutral": "🟡"}
+
+# يوم الأسبوع بالعربية — من datetime مباشرة لا نص ثابت
+WEEKDAYS_AR = {
+    "Monday": "الاثنين", "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء",
+    "Thursday": "الخميس", "Friday": "الجمعة", "Saturday": "السبت", "Sunday": "الأحد",
+}
+
+def _esc(text: str) -> str:
+    """يُهرّب نص لـ MarkdownV2"""
+    for ch in r"\_*[]()~`>#+-=|{}.!":
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
+def signal_label(p: int) -> str:
+    """قوة الإشارة بدل نسبة احتمالية مضللة"""
+    if p >= 75: return "🔥 قوية"
+    if p >= 65: return "✅ متوسطة"
+    return "⚠️ ضعيفة"
+
+
+# ══════════════════════════════════════════════════════════
+#  جلب سعر BTC الحي
+# ══════════════════════════════════════════════════════════
+def fetch_btc_price() -> str:
+    """يجلب سعر BTC/USD من Alpha Vantage"""
+    try:
+        if ALPHA_VANTAGE_KEY:
+            url = (
+                f"https://www.alphavantage.co/query"
+                f"?function=CURRENCY_EXCHANGE_RATE"
+                f"&from_currency=BTC&to_currency=USD&apikey={ALPHA_VANTAGE_KEY}"
+            )
+            r = requests.get(url, timeout=10)
+            rate = r.json().get("Realtime Currency Exchange Rate", {})
+            price = rate.get("5. Exchange Rate", "")
+            if price:
+                return f"${float(price):,.0f}"
+        if TWELVE_DATA_KEY:
+            url = (
+                f"https://api.twelvedata.com/price"
+                f"?symbol=BTC/USD&apikey={TWELVE_DATA_KEY}"
+            )
+            r = requests.get(url, timeout=10)
+            price = r.json().get("price", "")
+            if price:
+                return f"${float(price):,.0f}"
+    except Exception as e:
+        log.debug(f"BTC price fetch error: {e}")
+    return "N/A"
+
+
+_TREND_AR = {
+    "uptrend":   "📈 صاعد",
+    "downtrend": "📉 هابط",
+    "sideways":  "➡️ عرضي",
+}
+_ALIGN_AR = {
+    "bullish_aligned":          "✅ توافق صعودي",
+    "bearish_aligned":          "🔴 توافق هبوطي",
+    "weekly_vs_monthly_conflict": "⚠️ تعارض أسبوعي/شهري",
+    "mixed":                    "🔄 مختلط",
+}
+
+
+def _tf_line(s: dict) -> str:
+    """يولّد سطراً ملخّصاً للفريمات الكبيرة للعرض في التقرير."""
+    w = _TREND_AR.get(s.get("weekly_trend", ""), "")
+    m = _TREND_AR.get(s.get("monthly_trend", ""), "")
+    al = _ALIGN_AR.get(s.get("tf_alignment", ""), "")
+    parts = []
+    if w:
+        parts.append(f"أسبوعي: {w}")
+    if m:
+        parts.append(f"شهري: {m}")
+    if al:
+        parts.append(al)
+    return " | ".join(parts) if parts else "لا بيانات"
+
+
+def format_message(stocks: list[dict]) -> str:
+    now_et  = datetime.now(ET)
+    et_now  = now_et.strftime("%I:%M %p ET")
+    date_ar = now_et.strftime("%Y/%m/%d")
+    weekday_en = now_et.strftime("%A")
+    weekday_ar = WEEKDAYS_AR.get(weekday_en, weekday_en)
+    btc_price  = fetch_btc_price()
+
+    lines = [
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "📈 *تقرير ما قبل الافتتاح*",
+        f"🕐 {_esc(et_now)}  \\|  📅 {_esc(date_ar)} {_esc(weekday_ar)}",
+        f"₿ BTC: {_esc(btc_price)}  \\|  🎯 أفضل {len(stocks)} أسهم",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+    ]
+
+    for i, s in enumerate(stocks, 1):
+        trend_e    = TREND_EMOJI.get(s.get("trend", "neutral"), "🟡")
+        cat_emojis = " ".join(CATALYST_EMOJI.get(ct, "•") for ct in s.get("catalyst_types", []))
+        cats_text  = _esc(" | ".join(s.get("catalysts", [])))
+        prob       = s.get("signal_strength", s.get("probability", 0))
+        analysis   = _esc(s.get("analysis_ar", ""))
+
+        lines += [
+            f"*{i}\\. {s['symbol']}* — {_esc(s.get('company',''))}",
+            f"   {trend_e} β\\={_esc(str(s.get('beta','?')))}  \\|  {_esc(s.get('change_pct','?'))}  \\|  RSI {_esc(str(s.get('rsi','?')))}",
+            f"   💡 قوة الإشارة: {signal_label(prob)}  \\|  🏭 {_esc(s.get('sector',''))}",
+            "",
+            f"   {cat_emojis} *المحفزات:*",
+            f"   _{cats_text}_",
+            "",
+            f"   📊 *الشارت:* _{_esc(s.get('chart_notes',''))}_",
+            f"   ↕️ *الفجوات:* _{_esc(s.get('gap_summary','لا فجوات'))}_",
+            f"   🗓 *الفريمات:* _{_esc(_tf_line(s))}_",
+            f"   📐 *نماذج:* _{_esc(s.get('patterns_summary_ar','لا نماذج'))}_",
+            "",
+            f"   📌 *خطة التداول:*",
+            f"   🔵 دخول:   `{s.get('entry','?')}`",
+            f"   🟢 هدف 1:  `{s.get('target1','?')}` \\({_esc(s.get('upside_pct','?'))}\\)",
+            f"   🟩 هدف 2:  `{s.get('target2','?')}`",
+            f"   🔴 وقف:    `{s.get('stop_loss','?')}`",
+            f"   ⚖️ ع\\/م:    {_esc(s.get('risk_reward','?'))}",
+            "",
+            f"   🤖 *تحليل AI:*",
+            f"   {analysis}",
+            "",
+            "  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
+            "",
+        ]
+
+    lines += [
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "⚠️ *تنبيه:* هذا التقرير لأغراض تعليمية فقط\\.",
+        "التداول ينطوي على مخاطر\\. استشر مستشارك المالي\\.",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "🤖 _PreMarket AI Scanner v2_",
+    ]
+
+    return "\n".join(lines)
+
+
+# ══════════════════════════════════════════════════════════
+#  9. إرسال Telegram
+# ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+#  9. توليد تقرير HTML تفاعلي
+# ══════════════════════════════════════════════════════════
+_BIAS_COLOR = {
+    "bullish_aligned":            "#16a34a",
+    "bearish_aligned":            "#dc2626",
+    "weekly_vs_monthly_conflict": "#d97706",
+    "mixed":                      "#6b7280",
+}
+
+def generate_html_report(stocks: list[dict], btc_price: str) -> str:
+    """يولّد تقرير HTML تفاعلي كامل — يُحفظ محلياً."""
+    now_et     = datetime.now(ET)
+    date_str   = now_et.strftime("%A, %B %d, %Y")
+    time_str   = now_et.strftime("%I:%M %p ET")
+    weekday_ar = WEEKDAYS_AR.get(now_et.strftime("%A"), "")
+
+    def trend_ar(t):
+        return {"uptrend": "📈 صاعد", "downtrend": "📉 هابط", "sideways": "➡️ عرضي"}.get(t or "", "—")
+
+    def align_ar(a):
+        return {
+            "bullish_aligned":            "✅ توافق صعودي",
+            "bearish_aligned":            "🔴 توافق هبوطي",
+            "weekly_vs_monthly_conflict": "⚠️ تعارض أسبوعي/شهري",
+            "mixed":                      "🔄 مختلط",
+        }.get(a or "", "—")
+
+    def trend_emoji(t):
+        return {"bullish": "🟢", "bearish": "🔴", "neutral": "🟡"}.get(t or "", "🟡")
+
+    def sig_badge(p):
+        if p >= 75: return '<span class="badge fire">🔥 قوية</span>'
+        if p >= 65: return '<span class="badge ok">✅ متوسطة</span>'
+        return '<span class="badge warn">⚠️ ضعيفة</span>'
+
+    cards_html = ""
+    for i, s in enumerate(stocks, 1):
+        sym      = s.get("symbol", "?")
+        company  = s.get("company", "")
+        sector   = s.get("sector", "")
+        price    = s.get("price", "?")
+        beta     = s.get("beta", "?")
+        chg      = s.get("change_pct", "?")
+        rsi      = s.get("rsi", "?")
+        sig      = s.get("signal_strength", s.get("probability", 0))
+        cats     = " | ".join(s.get("catalysts", []))
+        chart_n  = s.get("chart_notes", "—")
+        gap_s    = s.get("gap_summary", "لا فجوات")
+        patt_s   = s.get("patterns_summary_ar", "لا نماذج")
+        w_trend  = trend_ar(s.get("weekly_trend"))
+        m_trend  = trend_ar(s.get("monthly_trend"))
+        align    = align_ar(s.get("tf_alignment"))
+        align_c  = _BIAS_COLOR.get(s.get("tf_alignment", ""), "#6b7280")
+        entry    = s.get("entry", "?")
+        t1       = s.get("target1", "?")
+        t2       = s.get("target2", "?")
+        sl       = s.get("stop_loss", "?")
+        rr       = s.get("risk_reward", "?")
+        up       = s.get("upside_pct", "?")
+        analysis = s.get("analysis_ar", "")
+        te       = trend_emoji(s.get("trend"))
+
+        cards_html += f"""
+<div class="card" id="stock-{i}">
+  <div class="card-header">
+    <div class="card-rank">#{i}</div>
+    <div class="card-title">
+      <span class="symbol">{sym}</span>
+      <span class="company">{company}</span>
+    </div>
+    <div class="card-meta">
+      {te} β={beta} &nbsp;|&nbsp; {chg} &nbsp;|&nbsp; RSI {rsi}
+    </div>
+    <div class="card-sig">{sig_badge(sig)}</div>
+  </div>
+
+  <div class="card-body">
+    <div class="row2">
+      <div class="col">
+        <h4>📣 المحفزات</h4>
+        <p class="cats">{cats}</p>
+        <p class="sector">🏭 {sector}</p>
+      </div>
+      <div class="col">
+        <h4>📌 خطة التداول</h4>
+        <table class="trade-table">
+          <tr><td>🔵 دخول</td>  <td><code>{entry}</code></td></tr>
+          <tr><td>🟢 هدف 1</td> <td><code>{t1}</code> <span class="up">({up})</span></td></tr>
+          <tr><td>🟩 هدف 2</td> <td><code>{t2}</code></td></tr>
+          <tr><td>🔴 وقف</td>   <td><code>{sl}</code></td></tr>
+          <tr><td>⚖️ ع/م</td>   <td><strong>{rr}</strong></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="row3">
+      <div class="info-block">
+        <h4>📊 الشارت اليومي</h4>
+        <p>{chart_n}</p>
+      </div>
+      <div class="info-block">
+        <h4>↕️ الفجوات السعرية</h4>
+        <p>{gap_s}</p>
+      </div>
+      <div class="info-block tf-block" style="border-color:{align_c}">
+        <h4>🗓 الفريمات الكبيرة</h4>
+        <p>أسبوعي: {w_trend} &nbsp;|&nbsp; شهري: {m_trend}</p>
+        <p class="align-tag" style="color:{align_c}">{align}</p>
+      </div>
+    </div>
+
+    <div class="patterns-block">
+      <h4>📐 النماذج الفنية المتشكّلة</h4>
+      <div class="patterns-text">{patt_s.replace(chr(10), "<br>")}</div>
+    </div>
+
+    <div class="analysis-block">
+      <h4>🤖 تحليل AI</h4>
+      <p class="analysis-text">{analysis}</p>
+    </div>
+  </div>
+</div>
+"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PreMarket Scanner — {date_str}</title>
+  <style>
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      direction: rtl;
+      padding: 20px;
+    }}
+    .header {{
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f2027 100%);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px 28px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }}
+    .header h1 {{ font-size: 1.5rem; color: #38bdf8; }}
+    .header .meta {{ font-size: 0.9rem; color: #94a3b8; line-height: 1.8; text-align: left; }}
+    .header .btc {{ font-size: 1.1rem; color: #f59e0b; font-weight: bold; }}
+    .card {{
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }}
+    .card:hover {{ box-shadow: 0 4px 20px rgba(56,189,248,0.15); }}
+    .card-header {{
+      background: #0f2027;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid #334155;
+    }}
+    .card-rank {{
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #38bdf8;
+      min-width: 36px;
+    }}
+    .card-title {{ flex: 1; }}
+    .symbol {{ font-size: 1.4rem; font-weight: bold; color: #f1f5f9; margin-left: 8px; }}
+    .company {{ font-size: 0.85rem; color: #94a3b8; }}
+    .card-meta {{ font-size: 0.9rem; color: #cbd5e1; }}
+    .badge {{
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      font-weight: bold;
+    }}
+    .badge.fire {{ background: #7f1d1d; color: #fca5a5; }}
+    .badge.ok   {{ background: #14532d; color: #86efac; }}
+    .badge.warn {{ background: #713f12; color: #fde68a; }}
+    .card-body {{ padding: 18px 20px; }}
+    .row2 {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-bottom: 16px;
+    }}
+    @media (max-width: 600px) {{ .row2 {{ grid-template-columns: 1fr; }} }}
+    h4 {{
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #64748b;
+      margin-bottom: 8px;
+    }}
+    .cats {{ color: #e2e8f0; font-size: 0.92rem; line-height: 1.5; }}
+    .sector {{ color: #94a3b8; font-size: 0.82rem; margin-top: 6px; }}
+    .trade-table {{ width: 100%; border-collapse: collapse; }}
+    .trade-table td {{
+      padding: 5px 8px;
+      font-size: 0.9rem;
+      border-bottom: 1px solid #1e293b;
+    }}
+    .trade-table td:first-child {{ color: #94a3b8; width: 70px; }}
+    code {{
+      background: #0f172a;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: #38bdf8;
+      font-family: monospace;
+    }}
+    .up {{ color: #4ade80; font-size: 0.82rem; }}
+    .row3 {{
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }}
+    @media (max-width: 700px) {{ .row3 {{ grid-template-columns: 1fr; }} }}
+    .info-block {{
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }}
+    .tf-block {{ border-width: 2px; }}
+    .align-tag {{ font-weight: bold; margin-top: 4px; }}
+    .patterns-block {{
+      background: #0f172a;
+      border: 1px solid #4c1d95;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      font-size: 0.88rem;
+      line-height: 1.7;
+    }}
+    .patterns-text {{ color: #c4b5fd; }}
+    .analysis-block {{
+      background: #0f2027;
+      border-right: 3px solid #38bdf8;
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+    }}
+    .analysis-text {{
+      color: #bae6fd;
+      font-size: 0.92rem;
+      line-height: 1.7;
+    }}
+    .footer {{
+      text-align: center;
+      color: #475569;
+      font-size: 0.78rem;
+      margin-top: 30px;
+      padding-top: 16px;
+      border-top: 1px solid #1e293b;
+    }}
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📈 PreMarket Scanner</h1>
+    <p style="color:#94a3b8;font-size:0.88rem;margin-top:4px">
+      أفضل {len(stocks)} أسهم مرشحة لافتتاح السوق الأمريكي
+    </p>
+  </div>
+  <div class="meta">
+    <div>📅 {weekday_ar} {date_str}</div>
+    <div>🕐 {time_str}</div>
+    <div class="btc">₿ BTC: {btc_price}</div>
+  </div>
+</div>
+
+{cards_html}
+
+<div class="footer">
+  ⚠️ هذا التقرير لأغراض تعليمية وتحليلية فقط — ليس توصية استثمارية<br>
+  PreMarket AI Scanner v4 — Alpha Vantage + Twelve Data + Claude AI
+</div>
+
+</body>
+</html>"""
+    return html
+
+
+def save_report(html: str) -> Path:
+    """يحفظ التقرير كملف HTML ويُعيد مساره."""
+    out_dir = Path(__file__).parent / "reports"
+    out_dir.mkdir(exist_ok=True)
+    date_tag = datetime.now(ET).strftime("%Y-%m-%d")
+    path = out_dir / f"premarket_{date_tag}.html"
+    path.write_text(html, encoding="utf-8")
+    log.info(f"✅ تم حفظ التقرير: {path}")
+    return path
+
+
+# ══════════════════════════════════════════════════════════
+#  10. نقطة الدخول
+# ══════════════════════════════════════════════════════════
+def run(open_browser: bool = True):
+    log.info("═══ PreMarket Scanner v4 — بدء التشغيل ═══")
+
+    # التحقق من المفاتيح المطلوبة
+    missing = [k for k, v in {
+        "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
+    }.items() if not v]
+    if missing:
+        log.error(f"مفاتيح مفقودة: {', '.join(missing)}")
+        return
+
+    if not ALPHA_VANTAGE_KEY and not TWELVE_DATA_KEY:
+        log.error("يجب وجود ALPHA_VANTAGE_KEY أو TWELVE_DATA_KEY على الأقل")
+        return
+
+    # 1. جمع البيانات
+    candidates = build_candidates()
+    if not candidates:
+        log.error("لا يوجد مرشحون — إنهاء")
+        return
+
+    # 2. تحليل AI
+    analyzed = analyze_with_claude(candidates)
+
+    # 3. سعر BTC الحي
+    btc = fetch_btc_price()
+
+    # 4. توليد وحفظ HTML
+    html = generate_html_report(analyzed, btc)
+    report_path = save_report(html)
+
+    # 5. فتح في المتصفح تلقائياً
+    if open_browser:
+        webbrowser.open(report_path.as_uri())
+        log.info("🌐 تم فتح التقرير في المتصفح")
+
+    print(f"\n{'═'*50}")
+    print(f"✅ التقرير جاهز: {report_path}")
+    print(f"{'═'*50}\n")
+    log.info("═══ اكتمل التشغيل ═══")
+    return report_path
+
+
+if __name__ == "__main__":
+    run()

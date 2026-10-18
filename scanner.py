@@ -596,16 +596,16 @@ def _detect_patterns(
             broken = current_price > resistance_lvl * 1.005
             patterns.append({
                 "name":      "Ascending Triangle",
-                "name_ar":   "مثلث صاعد",
+                "name_ar":   "مثلث �تعدة",
                 "timeframe": timeframe,
-                "stage":     "كسر صعودي 🟢" if broken else "يتشكّل ⚠️",
+                "stage":     "كسر صاعدق 🟢" if broken else "يتشكّل ⚠️",
                 "bias":      "bullish",
                 "key_level": round(resistance_lvl, 2),
-                "note_ar":   f"مقاومة أفقية ~{round(resistance_lvl,2)} | قيعان صاعدة",
+                "note_ar":   f"مقاومة أفقية ~{round(resistance_lvl,2}} | قيعان صعودة",
             })
 
     # ──────────────────────────────────────────────────────
-    # 6. Descending Triangle (قيعان ثابتة + قمم هابطة)
+    # 6. Descending Triangle (قيعان ثابت٩ + قمم هابط(�
     # ──────────────────────────────────────────────────────
     if len(ph) >= 2 and len(pl) >= 2:
         top_vals    = [v for _, v in ph[-3:]]
@@ -637,7 +637,7 @@ def _detect_patterns(
                 "name":      "Bull Flag",
                 "name_ar":   "راية صعودية",
                 "timeframe": timeframe,
-                "stage":     "يتشكّل — انتظر كسر أعلى الراية ⚠️",
+                "stage":     "يتشكّل — انتظر كسر أعمل الراية ⚠️",
                 "bias":      "bullish",
                 "key_level": round(max(h[-5:]), 2),
                 "note_ar":   f"عمود +{round(pole_gain,1)}% | الراية ضيقة {round(flag_rel,1)}%",
@@ -720,7 +720,7 @@ def fetch_multi_timeframe(symbol: str) -> dict:
     """
     يجلب بيانات الأسبوعي والشهري ويحلل:
       - الاتجاه على كل فريم
-      - النماذج الفنية المتشكّلة أو في طور التشكّل
+      - النماذج الفنية المتشكّمة أو في طور التشكّل
     يُعيد قاموساً يُضاف لبيانات المرشح.
     """
     if not TWELVE_DATA_KEY:
@@ -806,11 +806,235 @@ def fetch_multi_timeframe(symbol: str) -> dict:
 
 
 # ══════════════════════════════════════════════════════════
+#  6-D. الحجم الاستثنائي أثناء الجلسة (Unusual Volume)
+# ══════════════════════════════════════════════════════════
+def fetch_intraday_volume(symbol: str) -> dict:
+    """
+    يجلب بيانات الحجم اللحظي ويحسب:
+      - rvol_5min : نسبة حجم آخر 5 دقائق ÷ متوسطها التاريخي في نفس الوقت
+      - rvol_today: نسبة الحجم المتراكم اليوم ÷ متوسط الحجم اليومي الكامل
+      - unusual_volume: True إذا rvol_today > 2.0
+      - volume_spike_pct: قمة الحجم الأعلى من المتوسط في آخر 5 دقائق
+    يستخدم Twelve Data 1min time_series.
+    """
+    if not TWELVE_DATA_KEY:
+        return {}
+    try:
+        # آخر 30 شمعة دقيقية
+        url = (
+            f"https://api.twelvedata.com/time_series"
+            f"?symbol={symbol}&interval=1min&outputsize=30"
+            f"&apikey={TWELVE_DATA_KEY}"
+        )
+        r = requests.get(url, timeout=12)
+        data = r.json()
+        candles = data.get("values", [])
+        if len(candles) < 5:
+            return {}
+
+        volumes = [int(c.get("volume", 0) or 0) for c in candles]
+        # أحدث 5 دقائق
+        recent_5_avg = sum(volumes[:5]) / 5 if volumes[:5] else 0
+        # باقي الدقائق كمرجع "طبيعي"
+        baseline_avg = sum(volumes[5:]) / max(len(volumes[5:]), 1)
+
+        rvol_5min = round(recent_5_avg / baseline_avg, 2) if baseline_avg > 0 else 0
+
+        # الحجم المتراكم اليوم: نجمع شمعات 1min المتاحة
+        today_vol = sum(volumes)
+
+        # نسبة مقارنة بمتوسط يومي (من بيانات السعر)
+        # سيتم تحديثها في build_candidates بعد جلب avg_volume
+        volume_spike_5m = round(
+            (recent_5_avg - baseline_avg) / baseline_avg * 100, 1
+        ) if baseline_avg > 0 else 0
+
+        return {
+            "rvol_5min":        rvol_5min,
+            "intraday_vol_sum": today_vol,
+            "volume_spike_5m_pct": volume_spike_5m,
+        }
+    except Exception as e:
+        log.debug(f"intraday_volume {symbol}: {e}")
+        return {}
+
+
+# ══════════════════════════════════════════════════════════
+#  6-E. بيانات الخيارات (Options Flow)
+# ══════════════════════════════════════════════════════════
+def fetch_options_flow(symbol: str) -> dict:
+    """
+    يجلب بيانات الخيارات من Alpha Vantage HISTORICAL_OPTIONS:
+      - unusual_options_volume: True إذا حجم الخيارات اليوم > 2× المتوسط
+      - high_vol_oi_ratio: قائمة عقود حجمها > 3× مراكزها المفتوحة ولا تنتهي اليوم
+      - options_sentiment: CALL/PUT ratio لقياس توجه السوق
+      - smart_money_signal: True إذا وُجدت عقود CALL بعيدة الانتهاء بحجم >> OI
+    """
+    if not ALPHA_VANTAGE_KEY:
+        return {}
+    try:
+        url = (
+            f"https://www.alphavantage.co/query"
+            f"?function=HISTORICAL_OPTIONS&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
+        )
+        r = requests.get(url, timeout=15)
+        data = r.json()
+        options = data.get("data", [])
+        if not options:
+            return {}
+
+        from datetime import date as dt_date
+        today = dt_date.today()
+        today_str_opt = today.strftime("%Y-%m-%d")
+
+        total_call_vol = 0
+        total_put_vol  = 0
+        total_vol      = 0
+        high_vol_oi    = []   # عقود: volume >> open_interest وليست اليوم
+        smart_signals  = []   # عقود مال ذكي محتمل
+
+        for opt in options:
+            try:
+                vol   = int(opt.get("volume", 0) or 0)
+                oi    = int(opt.get("open_interest", 0) or 0)
+                exp   = opt.get("expiration", "")
+                ctype = opt.get("type", "").upper()
+                strike = float(opt.get("strike", 0) or 0)
+                iv    = float(opt.get("implied_volatility", 0) or 0)
+
+                total_vol += vol
+                if ctype == "call":
+                    total_call_vol += vol
+                else:
+                    total_put_vol  += vol
+
+                # شرط الفارق الكبير بين الحجم والمراكز المفتوحة
+                # + ليست منتهية اليوم (نريد بناء مركز حقيقي)
+                if oi > 0 and vol > 0 and exp and exp > today_str_opt:
+                    vol_oi_ratio = vol / oi
+                    if vol_oi_ratio >= 3.0 and vol >= 500:
+                        # احسب كم يوم متبقي
+                        try:
+                            exp_date = dt_date.fromisoformat(exp)
+                            days_left = (exp_date - today).days
+                        except Exception:
+                            days_left = -1
+
+                        entry = {
+                            "type":          ctype,
+                            "strike":        strike,
+                            "expiration":    exp,
+                            "days_to_exp":   days_left,
+                            "volume":        vol,
+                            "open_interest": oi,
+                            "vol_oi_ratio":  round(vol_oi_ratio, 1),
+                            "iv":            round(iv * 100, 1) if iv else None,
+                        }
+                        high_vol_oi.append(entry)
+
+                        # مال ذكي: CALL بعيدة (>14 يوم) + حجم ضخم جداً
+                        if ctype == "call" and days_left > 14 and vol_oi_ratio >= 5.0:
+                            smart_signals.append(entry)
+
+            except Exception:
+                continue
+
+        # ترتيب بحسب نسبة vol/OI الأعلى
+        high_vol_oi.sort(key=lambda x: x["vol_oi_ratio"], reverse=True)
+        high_vol_oi = high_vol_oi[:5]   # أبرز 5 عقود فقط
+
+        smart_signals.sort(key=lambda x: x["volume"], reverse=True)
+
+        # نسبة CALL/PUT
+        cp_ratio = round(total_call_vol / max(total_put_vol, 1), 2)
+
+        # هل الحجم الكلي استثنائي؟ (نقارن بمتوسط تاريخي مبسّط)
+        # Alpha Vantage يعيد بيانات آخر يوم تداول فقط في HISTORICAL_OPTIONS
+        unusual_options = total_vol >= 5000   # حد بسيط — يمكن تعديله
+
+        result = {
+            "options_total_vol":    total_vol,
+            "options_call_vol":     total_call_vol,
+            "options_put_vol":      total_put_vol,
+            "options_cp_ratio":     cp_ratio,
+            "unusual_options_vol":  unusual_options,
+            "high_vol_oi_contracts": high_vol_oi,
+            "smart_money_signals":  smart_signals,
+            "has_smart_money":      len(smart_signals) > 0,
+        }
+        log.debug(
+            f"  {symbol} options → total_vol={total_vol} CP={cp_ratio}"
+            f" smart={len(smart_signals)} high_ratio_contracts={len(high_vol_oi)}"
+        )
+        return result
+
+    except Exception as e:
+        log.debug(f"options_flow {symbol}: {e}")
+        return {}
+
+
+def options_score(opt: dict) -> float:
+    """
+    نقطة إضافية للسهم بناءً على إشارات الخيارات:
+      +3.0  مال ذكي محتمل (CALL بعيدة + حجم >> OI)
+      +2.0  حجم خيارات استثنائي
+      +1.0  لكل عقد vol/OI >= 3× وليس اليوم
+      +1.0  CP ratio > 2.0 (ميل CALL قوي)
+    """
+    if not opt:
+        return 0.0
+    score = 0.0
+    if opt.get("has_smart_money"):
+        score += 3.0
+    if opt.get("unusual_options_vol"):
+        score += 2.0
+    score += min(len(opt.get("high_vol_oi_contracts", [])), 3) * 1.0
+    if opt.get("options_cp_ratio", 1.0) > 2.0:
+        score += 1.0
+    return score
+
+
+def options_summary_ar(opt: dict) -> str:
+    """يولّد ملخصاً عربياً لبيانات الخيارات."""
+    if not opt or opt.get("options_total_vol", 0) == 0:
+        return "لا بيانات خىارات"
+
+    lines = []
+    cp = opt.get("options_cp_ratio", 1.0)
+    total = opt.get("options_total_vol", 0)
+    lines.append(
+        f"حجم الخيارات: {total:,} | "
+        f"Call/Put: {cp:.2f} ({'ميل شراء 🟢' if cp > 1.5 else 'ميل بيع 🔴' if cp < 0.7 else 'متوازن'})"
+    )
+
+    contracts = opt.get("high_vol_oi_contracts", [])
+    if contracts:
+        lines.append("عقود استثنائية (حجم >> مراكز مفتوحة، لا تنتهي اليوم):")
+        for c in contracts[:3]:
+            emoji = "🟢" if c["type"] == "call" else "🔴"
+            lines.append(
+                f"  {emoji} {c['type'].upper()} ${c['strike']} "
+                f"exp {c['expiration']} ({c['days_to_exp']}ي) | "
+                f"Vol {c['volume']:,} / OI {c['open_interest']:,} = {c['vol_oi_ratio']}×"
+                + (f" | IV {c['iv']}%" if c.get("iv") else "")
+            )
+
+    if opt.get("has_smart_money"):
+        sm = opt["smart_money_signals"][0]
+        lines.append(
+            f"🔔 مال ذكي محتمل: CALL ${sm['strike']} exp {sm['expiration']}"
+            f" | {sm['volume']:,} عقد ({sm['vol_oi_ratio']}× OI)"
+        )
+
+    return "\n".join(lines)
+
+
+# ══════════════════════════════════════════════════════════
 #  6. بناء قائمة الأسهم المرشحة
 # ══════════════════════════════════════════════════════════
 def build_candidates() -> list[dict]:
     """يجمع البيانات لجميع المرشحين ويصفّيهم"""
-    log.info("═══ بدء بناء قائمة المرشحين ═══")
+    log.info("═══ بدء بهاء قائمة المرشحين ═══")
 
     # دمج قائمة المراقبة مع المتحركين اليوم
     movers  = fetch_top_movers_av()
@@ -855,6 +1079,22 @@ def build_candidates() -> list[dict]:
         mtf_data = fetch_multi_timeframe(sym)
         time.sleep(0.5)
 
+        # ── الجديد: الحجم اللحظي الاستثنائي ──
+        intraday_vol = fetch_intraday_volume(sym)
+        # حساب rvol_today = حجم اليوم ÷ متوسط يومي
+        avg_vol  = price_data.get("avg_volume", 1) or 1
+        today_cumvol = intraday_vol.get("intraday_vol_sum", 0)
+        rvol_today = round(today_cumvol / avg_vol, 2) if avg_vol else 0
+        intraday_vol["rvol_today"]       = rvol_today
+        intraday_vol["unusual_volume"]   = rvol_today >= 2.0
+        time.sleep(0.3)
+
+        # ── الجديد: بيانات الخيارات ──
+        opt_data    = fetch_options_flow(sym)
+        opt_score   = options_score(opt_data)
+        opt_summary = options_summary_ar(opt_data)
+        time.sleep(0.5)
+
         stock = {
             **price_data,
             **company_data,
@@ -870,15 +1110,31 @@ def build_candidates() -> list[dict]:
             "tf_alignment":        mtf_data.get("tf_alignment"),
             "forming_patterns":    mtf_data.get("patterns", []),
             "patterns_summary_ar": mtf_data.get("patterns_summary_ar", "لا نماذج"),
+            # ── حجم لحظي استثنائي ──
+            "rvol_5min":           intraday_vol.get("rvol_5min", 0),
+            "rvol_today":          rvol_today,
+            "unusual_volume":      intraday_vol.get("unusual_volume", False),
+            "volume_spike_5m_pct": intraday_vol.get("volume_spike_5m_pct", 0),
+            # ── خيارات ──
+            "options_total_vol":    opt_data.get("options_total_vol", 0),
+            "options_cp_ratio":     opt_data.get("options_cp_ratio", 0),
+            "unusual_options_vol":  opt_data.get("unusual_options_vol", False),
+            "has_smart_money":      opt_data.get("has_smart_money", False),
+            "high_vol_oi_contracts": opt_data.get("high_vol_oi_contracts", []),
+            "smart_money_signals":  opt_data.get("smart_money_signals", []),
+            "_options_score":       opt_score,
+            "options_summary_ar":   opt_summary,
         }
         candidates.append(stock)
         time.sleep(1.0)   # احترام حدود الطلبات
 
-    # ترتيب مركّب: (بيتا × حجم نسبي) + نقطة الفجوات
+    # ترتيب مركّب: (بيتا × حجم نسبي) + نقطة الفجوات + نقطة الخيارات + rvol
     candidates.sort(
         key=lambda x: (
-            x.get("beta", 0) * (x.get("volume", 1) / max(x.get("avg_volume", 1), 1))
+            x.get("beta", 0) * max(x.get("rvol_today", 0),
+                                    x.get("volume", 1) / max(x.get("avg_volume", 1), 1))
             + x.get("_gap_score", 0)
+            + x.get("_options_score", 0)
         ),
         reverse=True,
     )
@@ -891,7 +1147,7 @@ def build_candidates() -> list[dict]:
 #  7. تحليل بالذكاء الاصطناعي — Claude
 # ══════════════════════════════════════════════════════════
 def analyze_with_claude(candidates: list[dict]) -> list[dict]:
-    """يحلل المرشحين بـ Claude ويختار أفضل TOP_N_STOCKS"""
+    """يحلل المرشحين بـ Claude ويختار أفظل TOP_N_STOCKS"""
     log.info("جارٍ التحليل بالذكاء الاصطناعي...")
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -909,13 +1165,15 @@ Candidate data:
 
 Selection criteria (ranked by importance):
 1. Strong pre-market catalyst (earnings, breaking news, analyst action, short squeeze potential)
-2. High beta + above-average relative volume (rel_volume > 1.5x)
+2. High beta + above-average relative volume (rvol_today > 1.5x OR rvol_5min spike > 50%)
 3. Gap analysis: today's opening gap AND unfilled historical gaps acting as price magnets
 4. Chart structure: trend direction, position vs SMA20/SMA50, last candle pattern, distance to support/resistance
 5. Multi-timeframe alignment: weekly + monthly trend confirming the daily move
 6. Forming chart patterns on weekly/monthly timeframes (huge edge when aligned with daily catalyst)
 7. RSI not overbought/oversold unless with strong momentum
 8. Risk/reward ratio > 2:1
+9. Unusual options volume AND/OR smart money signals (Vol >> OI on non-today expiry CALL contracts)
+10. Options Call/Put ratio skewed bullish (>1.5) confirms directional bias
 
 Gap interpretation rules:
 - gap_today "gap_up": bullish momentum — price likely continues up OR gets faded
@@ -961,16 +1219,18 @@ Respond ONLY with a valid JSON array — no markdown, no explanation outside the
     "catalysts": ["Strong earnings beat Q3", "Revenue +22% YoY"],
     "catalyst_types": ["earnings", "news"],
     "trend": "bullish",
-    "gap_summary": "فجوة صعودية +2.3% عند الافتتاح | فجوة تاريخية غير مغلقة عند $138 (هدف محتمل)",
+    "gap_summary": "فجوة صعودية +2.3% عند الافتتاح | فجوة تاريخية غير مؼلقة عند $138 (هدف محتمل)",
     "chart_notes": "فوق SMA20 وSMA50 | مقاومة على بُعد 3.1% | نمط مطرقة على الدعم",
     "patterns_summary_ar": "• مثلث صاعد (أسبوعي): يتشكّل ⚠️ — مقاومة أفقية ~$148 | قيعان صاعدة",
+    "volume_notes": "حجم استثنائي: 2.4× المتوسط | ارتفاع حاد في آخر 5 دقائق +180%",
+    "options_notes": "🔔 مال ذكي: CALL $150 exp 2025-02-21 | 3200 عقد (6.2× OI) | CP ratio: 2.8",
     "entry": 143.20,
     "target1": 149.50,
     "target2": 155.00,
     "stop_loss": 139.80,
     "risk_reward": "2.4:1",
     "upside_pct": "+4.4%",
-    "analysis_ar": "جملتان أو ثلاث بالعربية تشرح المحفز + البنية الفنية للشارت اليومي والأسبوعي + تأثير الفجوات والنماذج على السيناريو المتوقع."
+    "analysis_ar": "جملتان أو ثلاث بالضربية تشرح المحفز + البنية الفنية للشارت اليومي والأسبوعي + تأثير الفجوات والنماذج على السيناريو المتوقع + إشارات الحجم والخياراڪ إن وُجدت."
   }}
 ]
 
@@ -983,9 +1243,22 @@ Rules:
 - chart_notes: brief Arabic: SMA position + distance to support/resistance + last candle pattern
 - patterns_summary_ar: keep or refine the detected multi-timeframe patterns from input data; if none detected write "لا نماذج واضحة"
 - trend: "bullish" | "bearish" | "neutral" — reflect DAILY timeframe
-- catalyst_types: only ["earnings","news","technical","analyst","short_squeeze","gap"]
+- catalyst_types: only ["earnings","news","technical","analyst","short_squeeze","gap","unusual_volume","smart_money"]
 - All price values must be numbers (not strings)
-- analysis_ar: 2-3 sentences in Arabic integrating catalyst + daily/weekly chart structure + gap context + any forming patterns
+- analysis_ar: 2-3 sentences in Arabic integrating catalyst + daily/weekly chart structure + gap context + any forming patterns + unusual volume/options signals if present
+
+Unusual Volume rules:
+- rvol_today >= 2.0 → significant intraday volume surge; add "unusual_volume" to catalyst_types; raise signal_strength +3
+- rvol_5min spike > 100% → very aggressive volume surge in last 5 min; raise signal_strength +4
+- unusual_volume=true with bullish trend → strong confirmation; note in analysis_ar
+
+Smart Money / Options rules:
+- has_smart_money=true → institutional positioning detected; add "smart_money" to catalyst_types; raise signal_strength +5
+- unusual_options_vol=true → abnormal options activity; raise signal_strength +3
+- high_vol_oi_contracts with vol_oi_ratio >= 5 on CALL non-today expiry → highest conviction signal; mention in analysis_ar
+- options_cp_ratio > 2.0 → strong call-side bias confirms bullish thesis
+- options_cp_ratio < 0.5 → strong put-side bias (bearish signal)
+- Include options_summary_ar in the output analysis_ar when meaningful signals exist
 """
 
     resp = client.messages.create(
@@ -1127,6 +1400,16 @@ def format_message(stocks: list[dict]) -> str:
             f"   ↕️ *الفجوات:* _{_esc(s.get('gap_summary','لا فجوات'))}_",
             f"   🗓 *الفريمات:* _{_esc(_tf_line(s))}_",
             f"   📐 *نماذج:* _{_esc(s.get('patterns_summary_ar','لا نماذج'))}_",
+            *(
+                [f"   📈 *حجم استثنائي:* _{_esc(s.get('volume_notes',''))}_"]
+                if s.get("unusual_volume") or s.get("volume_notes")
+                else []
+            ),
+            *(
+                [f"   ⚡ *خيارات:* _{_esc(s.get('options_notes','') or s.get('options_summary_ar',''))}_"]
+                if s.get("unusual_options_vol") or s.get("has_smart_money")
+                else []
+            ),
             "",
             f"   📌 *خطة التداول:*",
             f"   🔵 دخول:   `{s.get('entry','?')}`",
@@ -1159,7 +1442,7 @@ def format_message(stocks: list[dict]) -> str:
 # ══════════════════════════════════════════════════════════
 #  9. توليد تقرير HTML تفاعلي
 # ══════════════════════════════════════════════════════════
-_BIAS_COLOR = {
+_BQPS_COLOR = {
     "bullish_aligned":            "#16a34a",
     "bearish_aligned":            "#dc2626",
     "weekly_vs_monthly_conflict": "#d97706",
@@ -1219,6 +1502,75 @@ def generate_html_report(stocks: list[dict], btc_price: str) -> str:
         analysis = s.get("analysis_ar", "")
         te       = trend_emoji(s.get("trend"))
 
+        # ── الحجم الاستثنائي ──
+        vol_notes    = s.get("volume_notes", "")
+        rvol_today   = s.get("rvol_today", 0)
+        rvol_5min    = s.get("rvol_5min", 0)
+        unusual_vol  = s.get("unusual_volume", False)
+        spike_5m     = s.get("volume_spike_5m_pct", 0)
+        vol_color    = "#22c55e" if unusual_vol else "#94a3b8"
+        rvol_label   = f"RVOL اليوم: <strong style='color:{vol_color}'>{rvol_today}×</strong>"
+        if rvol_5min:
+            rvol_label += f" | آخر 5د: <strong>{rvol_5min}×</strong>"
+        if spike_5m and spike_5m > 0:
+            rvol_label += f" | ارتفاع حجم 5د: +{spike_5m}%"
+        if unusual_vol:
+            rvol_label += " 🔥"
+
+        # ── بيانات الخيارات ──
+        opt_notes    = s.get("options_notes", "")
+        opt_summary  = s.get("options_summary_ar", "")
+        opt_total    = s.get("options_total_vol", 0)
+        cp_ratio     = s.get("options_cp_ratio", 0)
+        unusual_opt  = s.get("unusual_options_vol", False)
+        smart_money  = s.get("has_smart_money", False)
+        high_contracts = s.get("high_vol_oi_contracts", [])
+
+        # بناء قسم الخيارات
+        if opt_total > 0 or opt_notes:
+            cp_color = "#22c55e" if cp_ratio > 1.5 else "#ef4444" if cp_ratio < 0.7 else "#94a3b8"
+            cp_dir   = "ميل شراء" if cp_ratio > 1.5 else "ميل بيع" if cp_ratio < 0.7 else "متوازن"
+            opt_header = (
+                f"حجم: {opt_total:,} | "
+                f"<span style='color:{cp_color}'>C/P: {cp_ratio:.2f} ({cp_dir})</span>"
+            ) if opt_total else opt_notes
+
+            contracts_html = ""
+            for c in high_contracts[:3]:
+                c_em = "🟢" if c.get("type") == "call" else "🔴"
+                iv_str = f" | IV {c['iv']}%" if c.get("iv") else ""
+                contracts_html += (
+                    f"<div class='opt-contract'>"
+                    f"{c_em} <strong>{c.get('type','').upper()}</strong> "
+                    f"${c.get('strike',0)} &nbsp;exp {c.get('expiration','')} "
+                    f"({c.get('days_to_exp','')}ي) &nbsp;|&nbsp; "
+                    f"Vol <strong>{c.get('volume',0):,}</strong> / "
+                    f"OI {c.get('open_interest',0):,} = "
+                    f"<strong style='color:#f59e0b'>{c.get('vol_oi_ratio',0)}×</strong>"
+                    f"{iv_str}</div>"
+                )
+
+            sm_badge = ""
+            if smart_money:
+                sm_signals = s.get("smart_money_signals", [])
+                if sm_signals:
+                    sm = sm_signals[0]
+                    sm_badge = (
+                        f"<div class='smart-badge'>🔔 مال ذكي: CALL ${sm.get('strike',0)} "
+                        f"exp {sm.get('expiration','')} | {sm.get('volume',0):,} عقد "
+                        f"({sm.get('vol_oi_ratio',0)}× OI)</div>"
+                    )
+
+            options_section = f"""
+    <div class="options-block{'  smart-money' if smart_money else ''}">
+      <h4>⚡ إشارات الخيارات{'  &nbsp;🔔 مال ذكي' if smart_money else ''}</h4>
+      <p class="opt-header">{opt_header}</p>
+      {contracts_html}
+      {sm_badge}
+    </div>"""
+        else:
+            options_section = ""
+
         cards_html += f"""
 <div class="card" id="stock-{i}">
   <div class="card-header">
@@ -1239,6 +1591,7 @@ def generate_html_report(stocks: list[dict], btc_price: str) -> str:
         <h4>📣 المحفزات</h4>
         <p class="cats">{cats}</p>
         <p class="sector">🏭 {sector}</p>
+        <p class="rvol-line">{rvol_label}</p>
       </div>
       <div class="col">
         <h4>📌 خطة التداول</h4>
@@ -1268,13 +1621,15 @@ def generate_html_report(stocks: list[dict], btc_price: str) -> str:
       </div>
     </div>
 
+    {options_section}
+
     <div class="patterns-block">
       <h4>📐 النماذج الفنية المتشكّلة</h4>
       <div class="patterns-text">{patt_s.replace(chr(10), "<br>")}</div>
     </div>
 
     <div class="analysis-block">
-      <h4>🤖 تحليل AI</h4>
+      <h4>🤖 تحميل AI</h4>
       <p class="analysis-text">{analysis}</p>
     </div>
   </div>
@@ -1418,6 +1773,44 @@ def generate_html_report(stocks: list[dict], btc_price: str) -> str:
       font-size: 0.92rem;
       line-height: 1.7;
     }}
+    .rvol-line {{
+      margin-top: 8px;
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }}
+    .options-block {{
+      background: #0d1f35;
+      border: 1px solid #1e40af;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      font-size: 0.87rem;
+      line-height: 1.7;
+    }}
+    .options-block.smart-money {{
+      border-color: #f59e0b;
+      box-shadow: 0 0 10px rgba(245,158,11,0.25);
+    }}
+    .options-block h4 {{ color: #60a5fa; margin-bottom: 6px; }}
+    .opt-header {{ color: #94a3b8; margin-bottom: 6px; }}
+    .opt-contract {{
+      background: #1e293b;
+      border-radius: 6px;
+      padding: 5px 10px;
+      margin: 4px 0;
+      color: #cbd5e1;
+      font-size: 0.84rem;
+    }}
+    .smart-badge {{
+      background: linear-gradient(90deg,#78350f,#451a03);
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      padding: 6px 12px;
+      margin-top: 8px;
+      color: #fcd34d;
+      font-weight: bold;
+      font-size: 0.88rem;
+    }}
     .footer {{
       text-align: center;
       color: #475569;
@@ -1434,7 +1827,7 @@ def generate_html_report(stocks: list[dict], btc_price: str) -> str:
   <div>
     <h1>📈 PreMarket Scanner</h1>
     <p style="color:#94a3b8;font-size:0.88rem;margin-top:4px">
-      أفضل {len(stocks)} أسهم مرشحة لافتتاح السوق الأمريكي
+      أفظل {len(stocks)} أسهم مرتاد لافتتاح السوق الأمريكي
     </p>
   </div>
   <div class="meta">
@@ -1488,7 +1881,7 @@ def run(open_browser: bool = True):
     # 1. جمع البيانات
     candidates = build_candidates()
     if not candidates:
-        log.error("لا يوجد مرشحون — إنهاء")
+        log.error("لا يوجد مرتاد — اصنهاء")
         return
 
     # 2. تحليل AI

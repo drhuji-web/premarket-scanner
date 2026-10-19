@@ -1059,7 +1059,20 @@ def build_candidates() -> list[dict]:
         beta  = company_data.get("beta", 0)
         price = price_data.get("price", 0)
 
-        if beta < MIN_BETA or price < 3:
+        # إذا Beta = 0 من API، نحسب تقديرية من نسبة التغيير اليومي
+        if beta == 0:
+            try:
+                chg_str = str(price_data.get("change", "0%")).replace("%", "").strip()
+                daily_chg = abs(float(chg_str))
+                beta = round(daily_chg / 1.3, 2)
+            except Exception:
+                beta = 0
+
+        # أسهم الـ WATCHLIST تعدي الفلتر حتى لو beta منخفضة
+        in_watchlist = sym in WATCHLIST
+        effective_min_beta = 1.0 if in_watchlist else MIN_BETA
+
+        if effective_min_beta > beta or price < 3:
             time.sleep(0.5)
             continue
 

@@ -596,7 +596,7 @@ def _detect_patterns(
             broken = current_price > resistance_lvl * 1.005
             patterns.append({
                 "name":      "Ascending Triangle",
-                "name_ar":   "مثلث �تعدة",
+                "name_ar":   "مثلث صاعد",
                 "timeframe": timeframe,
                 "stage":     "كسر صاعدق 🟢" if broken else "يتشكّل ⚠️",
                 "bias":      "bullish",
@@ -605,7 +605,7 @@ def _detect_patterns(
             })
 
     # ──────────────────────────────────────────────────────
-    # 6. Descending Triangle (قيعان ثابت٩ + قمم هابط(�
+    # 6. Descending Triangle (قيعان ثابت٩ + قمم هابط(�
     # ──────────────────────────────────────────────────────
     if len(ph) >= 2 and len(pl) >= 2:
         top_vals    = [v for _, v in ph[-3:]]

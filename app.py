@@ -234,14 +234,39 @@ def api_time():
 def api_run():
     with _lock:
         if _state["status"] == "running":
-            return jsonify({"ok": False, "msg": "السكانر يعمل بالفعل"})
+            # إذا مضى أكثر من 35 دقيقة → نعيد الضبط تلقائياً
+            started = _state.get("started_at", "")
+            try:
+                from datetime import datetime
+                import pytz
+                ET = pytz.timezone("America/New_York")
+                now_str = datetime.now(ET).strftime("%H:%M:%S ET")
+                # قارن الوقت الحالي بوقت البداية
+                fmt = "%H:%M:%S ET"
+                t_start = datetime.strptime(started, fmt).replace(year=2000)
+                t_now   = datetime.strptime(now_str,  fmt).replace(year=2000)
+                elapsed_min = (t_now - t_start).seconds / 60
+            except Exception:
+                elapsed_min = 0
+            if elapsed_min < 35:
+                return jsonify({"ok": False, "msg": "السكانر يعمل بالفعل"})
+            # تجاوز 35 دقيقة → reset
+            _state["status"] = "idle"
 
     t = threading.Thread(target=_run_scanner, daemon=True)
     t.start()
     return jsonify({"ok": True})
 
 
-@app.route("/api/status")
+@app.route("/api/reset", methods=["POST"])
+def api_reset():
+    with _lock:
+        _state["status"] = "idle"
+        _state["error"]  = None
+    return jsonify({"ok": True})
+
+
+@app.route("/api/status")@app.route("/api/status")
 def api_status():
     with _lock:
         s = dict(_state)

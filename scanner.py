@@ -1047,9 +1047,11 @@ def build_candidates() -> list[dict]:
     candidates = []
     for sym in symbols:
         log.info(f"  جارٍ تحليل {sym}...")
+        log.warning(f"DEBUG {sym}: in_watchlist={sym in WATCHLIST}")
 
         # بيانات السعر
         price_data = fetch_stock_data_twelve(sym)
+        log.warning(f"DEBUG {sym}: price_data keys={list(price_data.keys()) if price_data else None}, price={price_data.get('price','MISSING') if price_data else None}")
 
         # أسهم الـ WATCHLIST: نضمن دخولها حتى لو API فشل
         in_watchlist = sym in WATCHLIST
@@ -1062,6 +1064,7 @@ def build_candidates() -> list[dict]:
                 continue
 
         company_data = fetch_company_overview_av(sym)
+        log.warning(f"DEBUG {sym}: company_data={bool(company_data)}, beta={company_data.get('beta','N/A') if company_data else 0}")
 
         # Beta: من API أو تقديرية أو مضمونة للـ WATCHLIST
         beta = float(company_data.get("beta", 0)) if company_data else 0
@@ -1081,6 +1084,7 @@ def build_candidates() -> list[dict]:
 
         effective_min_beta = MIN_BETA
         if beta < effective_min_beta or (price < 3 and not in_watchlist):
+        log.warning(f"DEBUG {sym}: beta={beta:.2f} MIN={MIN_BETA}, price={price}, in_watchlist={in_watchlist} -> FILTER CHECK")
             time.sleep(0.5)
             continue
 

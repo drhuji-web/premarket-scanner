@@ -1526,7 +1526,7 @@ def generate_html_report(stocks: list[dict], btc_price: str) -> str:
         w_trend  = trend_ar(s.get("weekly_trend"))
         m_trend  = trend_ar(s.get("monthly_trend"))
         align    = align_ar(s.get("tf_alignment"))
-        align_c  = _BIAS_COLOR.get(s.get("tf_alignment", ""), "#6b7280")
+        align_c  = _BQPS_COLOR.get(s.get("tf_alignment", ""), "#6b7280")
         entry    = s.get("entry", "?")
         t1       = s.get("target1", "?")
         t2       = s.get("target2", "?")

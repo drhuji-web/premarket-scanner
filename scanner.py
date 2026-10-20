@@ -1096,9 +1096,27 @@ def build_candidates() -> list[dict]:
         if in_watchlist and beta < 1.5:
             beta = 1.5
 
+        # إذا السهم في watchlist وprice=0، نحاول Alpha Vantage كـ fallback
+        if in_watchlist and price == 0 and ALPHA_VANTAGE_KEY:
+            try:
+                av_key = ALPHA_VANTAGE_KEY
+                av_url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={sym}&apikey={av_key}"
+                av_r = requests.get(av_url, timeout=8)
+                av_q = av_r.json().get("Global Quote", {})
+                av_price = float(av_q.get("05. price", 0) or 0)
+                if av_price > 0:
+                    chg_pct = av_q.get("10. change percent", "0%").replace("%", "").strip()
+                    vol = int(float(av_q.get("06. volume", 1000000) or 1000000))
+                    price_data["price"] = av_price
+                    price_data["change"] = chg_pct + "%"
+                    price_data["volume"] = vol
+                    price = av_price
+                    log.info(f"  {sym}: AV fallback price={av_price}")
+            except Exception as e:
+                log.debug(f"AV fallback {sym}: {e}")
+
         effective_min_beta = MIN_BETA
         if beta < effective_min_beta or (price < 3 and not in_watchlist):
-            log.warning(f"DEBUG {sym}: beta={beta:.2f} MIN={MIN_BETA}, price={price}, in_watchlist={in_watchlist} -> FILTER CHECK")
             time.sleep(0.5)
             continue
 

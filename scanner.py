@@ -1286,6 +1286,10 @@ Respond ONLY with a valid JSON array — no markdown, no explanation outside the
     "stop_loss": 139.80,
     "risk_reward": "2.4:1",
     "upside_pct": "+4.4%",
+    "option_plans": [
+      {{"type":"call","strike":150,"expiration":"2025-02-21","entry":3.20,"target1":5.50,"target2":8.00,"stop_loss":1.80,"note":"مال ذكي 6.2× OI — دخول عند تأكيد الدعم"}},
+      {{"type":"put","strike":120,"expiration":"2025-01-31","entry":1.10,"target1":2.00,"target2":3.50,"stop_loss":0.60,"note":"تحوط — تجنب إلا لو كسر دعم $135"}}
+    ],
     "analysis_ar": "جملتان أو ثلاث بالضربية تشرح المحفز + البنية الفنية للشارت اليومي والأسبوعي + تأثير الفجوات والنماذج على السيناريو المتوقع + إشارات الحجم والخياراڪ إن وُجدت."
   }}
 ]
@@ -1295,6 +1299,7 @@ Rules:
 - entry: logical entry considering gap fill risk and nearest support/resistance
 - target1: first logical target (gap fill OR resistance level), target2: extended move
 - stop_loss: below nearest support or gap fill level, whichever is tighter
+- option_plans: for EACH contract in high_vol_oi_contracts, provide a separate trade plan with: type, strike, expiration, entry (option premium to buy), target1, target2, stop_loss (option premium), and a note in Arabic explaining whether it is actionable or just a hedge. If no options signals exist, return empty array []
 - gap_summary: brief Arabic description of today's gap AND nearest unfilled historical gap (or "لا فجوات" if none)
 - chart_notes: brief Arabic: SMA position + distance to support/resistance + last candle pattern
 - patterns_summary_ar: keep or refine the detected multi-timeframe patterns from input data; if none detected write "لا نماذج واضحة"
@@ -1636,6 +1641,36 @@ def generate_html_report(stocks: list[dict], btc_price: str) -> str:
         else:
             options_section = ""
 
+        # ── option_plans: خطة تداول لكل عقد خيارات ──
+        option_plans = s.get("option_plans", [])
+        option_plans_html = ""
+        if option_plans:
+            plans_items = ""
+            for pl in option_plans:
+                pl_em = "🟢" if pl.get("type") == "call" else "🔴"
+                pl_note = pl.get("note", "")
+                plans_items += (
+                    "<div class='opt-plan-item'>"
+                    "<div class='opt-plan-header'>"
+                    + pl_em + " <strong>" + pl.get('type','').upper() + "</strong> "
+                    + "$" + str(pl.get('strike',0)) + " — " + pl.get('expiration','')
+                    + "</div>"
+                    "<table class='plan-mini-table'>"
+                    "<tr><td>دخول</td><td><code>$" + str(pl.get('entry',0)) + "</code></td>"
+                    "<td>هدف 1</td><td><code>$" + str(pl.get('target1',0)) + "</code></td></tr>"
+                    "<tr><td>هدف 2</td><td><code>$" + str(pl.get('target2',0)) + "</code></td>"
+                    "<td>وقف</td><td><code>$" + str(pl.get('stop_loss',0)) + "</code></td></tr>"
+                    "</table>"
+                    "<p class='opt-plan-note'>💬 " + pl_note + "</p>"
+                    "</div>"
+                )
+            option_plans_html = (
+                "\n    <div class=\"option-plans-block\">"
+                "\n      <h4>🎯 خطط تداول الخيارات</h4>"
+                "\n      " + plans_items +
+                "\n    </div>"
+            )
+
         cards_html += f"""
 <div class="card" id="stock-{i}">
   <div class="card-header">
@@ -1670,6 +1705,7 @@ def generate_html_report(stocks: list[dict], btc_price: str) -> str:
       </div>
     </div>
 
+    {option_plans_html}
     <div class="row3">
       <div class="info-block">
         <h4>📊 الشارت اليومي</h4>
@@ -1866,6 +1902,26 @@ def generate_html_report(stocks: list[dict], btc_price: str) -> str:
       color: #cbd5e1;
       font-size: 0.84rem;
     }}
+    .option-plans-block {{
+      background: #0f2027;
+      border: 1px solid #1d4ed8;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 12px 0;
+    }}
+    .option-plans-block h4 {{ color: #60a5fa; margin-bottom: 10px; font-size: 0.95rem; }}
+    .opt-plan-item {{
+      background: #1e293b;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 6px 0;
+      border-right: 3px solid #3b82f6;
+    }}
+    .opt-plan-header {{ font-size: 0.9rem; color: #e2e8f0; margin-bottom: 6px; }}
+    .plan-mini-table {{ width: 100%; font-size: 0.82rem; color: #94a3b8; border-collapse: collapse; }}
+    .plan-mini-table td {{ padding: 2px 6px; }}
+    .plan-mini-table code {{ color: #fbbf24; background: transparent; }}
+    .opt-plan-note {{ font-size: 0.8rem; color: #94a3b8; margin-top: 6px; }}
     .smart-badge {{
       background: linear-gradient(90deg,#78350f,#451a03);
       border: 1px solid #f59e0b;

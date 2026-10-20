@@ -112,7 +112,7 @@ def fetch_stock_data_twelve(symbol: str) -> dict:
         return {
             "symbol":        symbol,
             "name":          q.get("name", symbol),
-            "price":         float(q.get("close", 0) or 0),
+            "price":         float(q.get("price", 0) or q.get("close", 0) or q.get("open", 0) or 0),
             "change":        q.get("percent_change", "0%"),
             "volume":        int(q.get("volume", 0) or 0),
             "avg_volume":    int(q.get("average_volume", 0) or 0),

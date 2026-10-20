@@ -1057,8 +1057,22 @@ def build_candidates() -> list[dict]:
         in_watchlist = sym in WATCHLIST
 
         if not price_data or not price_data.get('price', 0):
-            if in_watchlist:
-                price_data = {"price": 50, "change": "2.0%", "volume": 1000000}
+            # محاولة الحصول على السعر الحقيقي من Alpha Vantage
+            av_price = 0
+            try:
+                av_url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={sym}&apikey={AV_KEY}"
+                av_r = requests.get(av_url, timeout=8)
+                av_q = av_r.json().get("Global Quote", {})
+                av_price = float(av_q.get("05. price", 0) or 0)
+            except Exception:
+                av_price = 0
+            if av_price > 0:
+                chg_pct = av_q.get("10. change percent", "0%").replace("%", "").strip()
+                vol = int(float(av_q.get("06. volume", 1000000) or 1000000))
+                price_data = {"price": av_price, "change": chg_pct + "%", "volume": vol}
+            elif in_watchlist:
+                time.sleep(0.5)
+                continue
             else:
                 time.sleep(0.5)
                 continue

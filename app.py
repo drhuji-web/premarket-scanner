@@ -266,7 +266,7 @@ def api_reset():
     return jsonify({"ok": True})
 
 
-@app.route("/api/status")@app.route("/api/status")
+@app.route("/api/status")
 def api_status():
     with _lock:
         s = dict(_state)

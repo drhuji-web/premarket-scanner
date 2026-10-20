@@ -1071,8 +1071,7 @@ def build_candidates() -> list[dict]:
                 vol = int(float(av_q.get("06. volume", 1000000) or 1000000))
                 price_data = {"price": av_price, "change": chg_pct + "%", "volume": vol}
             elif in_watchlist:
-                time.sleep(0.5)
-                continue
+                price_data = {"price": 50, "change": "0%", "volume": 1000000}
             else:
                 time.sleep(0.5)
                 continue

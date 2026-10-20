@@ -601,7 +601,7 @@ def _detect_patterns(
                 "stage":     "كسر صاعدق 🟢" if broken else "يتشكّل ⚠️",
                 "bias":      "bullish",
                 "key_level": round(resistance_lvl, 2),
-                "note_ar":   f"مقاومة أفقية ~{round(resistance_lvl,2}} | قيعان صعودة",
+                "note_ar":   f"مقاومة أفقية ~{round(resistance_lvl,2)} | قيعان صعودة",
             })
 
     # ──────────────────────────────────────────────────────

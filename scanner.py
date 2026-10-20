@@ -912,7 +912,7 @@ def fetch_options_flow(symbol: str) -> dict:
                 # + ليست منتهية اليوم (نريد بناء مركز حقيقي)
                 if oi > 0 and vol > 0 and exp and exp > today_str_opt:
                     vol_oi_ratio = vol / oi
-                    if vol_oi_ratio >= 3.0 and vol >= 500:
+                    if vol_oi_ratio >= 3.0 and vol >= 500 and oi >= 100:  # OI منخفض جداً = تحوط رخيص لا إشارة حقيقية
                         # احسب كم يوم متبقي
                         try:
                             exp_date = dt_date.fromisoformat(exp)

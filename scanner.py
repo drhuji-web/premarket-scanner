@@ -1054,7 +1054,7 @@ def build_candidates() -> list[dict]:
         # أسهم الـ WATCHLIST: نضمن دخولها حتى لو API فشل
         in_watchlist = sym in WATCHLIST
 
-        if not price_data:
+        if not price_data or not price_data.get('price', 0):
             if in_watchlist:
                 price_data = {"price": 50, "change": "2.0%", "volume": 1000000}
             else:
@@ -1080,7 +1080,7 @@ def build_candidates() -> list[dict]:
             beta = 1.5
 
         effective_min_beta = MIN_BETA
-        if beta < effective_min_beta or price < 3:
+        if beta < effective_min_beta or (price < 3 and not in_watchlist):
             time.sleep(0.5)
             continue
 

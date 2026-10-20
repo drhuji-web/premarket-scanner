@@ -1084,7 +1084,7 @@ def build_candidates() -> list[dict]:
 
         effective_min_beta = MIN_BETA
         if beta < effective_min_beta or (price < 3 and not in_watchlist):
-        log.warning(f"DEBUG {sym}: beta={beta:.2f} MIN={MIN_BETA}, price={price}, in_watchlist={in_watchlist} -> FILTER CHECK")
+            log.warning(f"DEBUG {sym}: beta={beta:.2f} MIN={MIN_BETA}, price={price}, in_watchlist={in_watchlist} -> FILTER CHECK")
             time.sleep(0.5)
             continue
 

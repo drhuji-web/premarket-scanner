@@ -1288,12 +1288,21 @@ Smart Money / Options rules:
 
     resp = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=4000,
+        max_tokens=8000,
         messages=[{"role": "user", "content": prompt}],
     )
 
     raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
-    result = json.loads(raw)
+    # استخراج JSON بشكل أقوى
+    import re as _re
+    raw_clean = _re.sub(r'```(?:json)?\s*|\s*```', '', raw).strip()
+    s, e = raw_clean.find('['), raw_clean.rfind(']')
+    if s != -1 and e != -1:
+        raw_clean = raw_clean[s:e+1]
+    try:
+        result = json.loads(raw_clean)
+    except Exception:
+        result = json.loads(raw_clean, strict=False)
     log.info(f"Claude اختار {len(result)} أسهم")
     return result
 
